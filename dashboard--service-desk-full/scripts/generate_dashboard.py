@@ -482,7 +482,7 @@ def generate_html(data, update_time):
                 avoidLabelOverlap: false,
                 itemStyle: {{ borderRadius: 8, borderColor: '#fff', borderWidth: 2 }},
                 label: {{ show: true, formatter: '{{b}}\\n{{c}}条' }},
-                data: {json.dumps([{{'name': k, 'value': v}} for k, v in stage_data.items()])}
+                data: {json.dumps([{'name': k, 'value': v} for k, v in stage_data.items()])}
             }}]
         }});
         
@@ -497,7 +497,7 @@ def generate_html(data, update_time):
                 avoidLabelOverlap: false,
                 itemStyle: {{ borderRadius: 8, borderColor: '#fff', borderWidth: 2 }},
                 label: {{ show: true, formatter: '{{b}}\\n{{c}}条' }},
-                data: {json.dumps([{{'name': k, 'value': v}} for k, v in score_data.items()])}
+                data: {json.dumps([{'name': k, 'value': v} for k, v in score_data.items()])}
             }}]
         }});
         
@@ -512,7 +512,7 @@ def generate_html(data, update_time):
                 avoidLabelOverlap: false,
                 itemStyle: {{ borderRadius: 8, borderColor: '#fff', borderWidth: 2 }},
                 label: {{ show: true, formatter: '{{b}}\\n{{c}}条' }},
-                data: {json.dumps([{{'name': k, 'value': v}} for k, v in channel_data.items()])}
+                data: {json.dumps([{'name': k, 'value': v} for k, v in channel_data.items()])}
             }}]
         }});
         

@@ -6,9 +6,14 @@
 
 import json
 import os
-import requests
 from datetime import datetime, timedelta
 from collections import Counter
+
+import lark_oapi as lark
+from lark_oapi.api.bitable.v1 import (
+    ListAppTableRecordRequest,
+    ListAppTableRequest,
+)
 
 # ==================== 配置区域 ====================
 # 飞书应用凭证（通过GitHub Secrets传入）
@@ -17,62 +22,87 @@ FEISHU_APP_SECRET = os.environ.get('FEISHU_APP_SECRET', '')
 BITABLE_APP_TOKEN = os.environ.get('BITABLE_APP_TOKEN', 'REDACTED')
 TABLE_NAME = '飞书服务台 工单列表'
 
-# ==================== 飞书API工具函数 ====================
-def get_tenant_access_token():
-    """获取飞书 tenant_access_token"""
-    url = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
-    headers = {"Content-Type": "application/json"}
-    data = {"app_id": FEISHU_APP_ID, "app_secret": FEISHU_APP_SECRET}
-    
-    response = requests.post(url, headers=headers, json=data)
-    result = response.json()
-    
-    if result.get('code') == 0:
-        return result.get('tenant_access_token')
-    else:
-        raise Exception(f"获取token失败: {result}")
+# ==================== 飞书SDK工具函数 ====================
+def build_lark_client():
+    """创建飞书官方 SDK 客户端，tenant token 由 SDK 自动维护。"""
+    if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
+        raise ValueError("请设置 FEISHU_APP_ID 和 FEISHU_APP_SECRET 环境变量")
 
-def get_bitable_records(token, app_token, table_name):
-    """获取多维表格数据"""
-    # 先获取 table_id
-    list_url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables"
-    headers = {"Authorization": f"Bearer {token}"}
-    
-    response = requests.get(list_url, headers=headers)
-    tables = response.json().get('data', {}).get('items', [])
-    
-    table_id = None
-    for table in tables:
-        if table.get('name') == table_name:
-            table_id = table.get('table_id')
+    return (
+        lark.Client.builder()
+        .app_id(FEISHU_APP_ID)
+        .app_secret(FEISHU_APP_SECRET)
+        .domain(lark.FEISHU_DOMAIN)
+        .build()
+    )
+
+def ensure_success(response, action):
+    """统一处理官方 SDK 响应错误。"""
+    if response.success():
+        return
+
+    raise Exception(
+        f"{action}失败: code={response.code}, msg={response.msg}, "
+        f"log_id={response.get_log_id()}, troubleshooter={response.get_troubleshooter()}"
+    )
+
+def find_table_id(client, app_token, table_name):
+    """按名称查找多维表格 table_id。"""
+    page_token = None
+
+    while True:
+        builder = (
+            ListAppTableRequest.builder()
+            .app_token(app_token)
+            .page_size(100)
+        )
+        if page_token:
+            builder.page_token(page_token)
+
+        response = client.bitable.v1.app_table.list(builder.build())
+        ensure_success(response, "获取数据表列表")
+
+        data = response.data
+        for table in data.items or []:
+            if table.name == table_name:
+                return table.table_id
+
+        if not data.has_more:
             break
-    
-    if not table_id:
-        raise Exception(f"找不到表: {table_name}")
-    
-    # 获取所有记录
+        page_token = data.page_token
+
+    raise Exception(f"找不到表: {table_name}")
+
+def get_bitable_records(client, app_token, table_name):
+    """使用飞书官方 SDK 获取多维表格全部记录。"""
+    table_id = find_table_id(client, app_token, table_name)
     records = []
     page_token = None
-    
+
     while True:
-        records_url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables/{table_id}/records"
-        params = {"page_size": 500}
+        builder = (
+            ListAppTableRecordRequest.builder()
+            .app_token(app_token)
+            .table_id(table_id)
+            .page_size(500)
+        )
         if page_token:
-            params["page_token"] = page_token
-            
-        response = requests.get(records_url, headers=headers, params=params)
-        result = response.json()
-        
-        if result.get('code') == 0:
-            records.extend(result.get('data', {}).get('items', []))
-            has_more = result.get('data', {}).get('has_more', False)
-            if has_more:
-                page_token = result.get('data', {}).get('page_token')
-            else:
-                break
-        else:
-            raise Exception(f"获取记录失败: {result}")
-    
+            builder.page_token(page_token)
+
+        response = client.bitable.v1.app_table_record.list(builder.build())
+        ensure_success(response, "获取记录")
+
+        data = response.data
+        for record in data.items or []:
+            records.append({
+                'record_id': record.record_id,
+                'fields': record.fields or {},
+            })
+
+        if not data.has_more:
+            break
+        page_token = data.page_token
+
     return records
 
 def extract_text(value, default='未知'):
@@ -527,14 +557,14 @@ def main():
     print(f"执行时间: {update_time}")
     
     try:
-        # 获取 token
-        print("正在获取飞书访问令牌...")
-        token = get_tenant_access_token()
-        print(f"✓ 获取成功")
+        # 创建飞书 SDK 客户端
+        print("正在初始化飞书 SDK 客户端...")
+        client = build_lark_client()
+        print("✓ 初始化成功")
         
         # 获取多维表格数据
         print("正在拉取多维表格数据...")
-        records = get_bitable_records(token, BITABLE_APP_TOKEN, TABLE_NAME)
+        records = get_bitable_records(client, BITABLE_APP_TOKEN, TABLE_NAME)
         print(f"✓ 拉取成功，共 {len(records)} 条记录")
         
         # 分析数据

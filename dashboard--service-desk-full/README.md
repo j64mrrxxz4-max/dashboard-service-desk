@@ -84,6 +84,7 @@ dashboard-service-desk/
 ├── dashboard--service-desk-full/
 │   ├── scripts/
 │   │   └── generate_dashboard.py  # 数据拉取和 HTML 生成
+│   ├── requirements.txt           # Python 依赖
 │   ├── public/
 │   │   └── index.html             # 仪表盘页面（每天自动更新）
 │   └── README.md
@@ -94,5 +95,5 @@ dashboard-service-desk/
 
 - 前端：HTML + CSS + JavaScript
 - 图表：ECharts.js 5.4.3
-- 数据拉取：GitHub Actions（Python）
+- 数据拉取：GitHub Actions（Python + 飞书官方 lark-oapi SDK）
 - 部署：Cloudflare Pages

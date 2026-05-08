@@ -234,7 +234,7 @@ def generate_html(data, update_time):
     avg_response = round(sum(response_times) / len(response_times)) if response_times else 0
     avg_response_text = format_duration(avg_response)
     update_date = update_time[:10]
-    date_range_start = dates[0]
+    date_range_start = (today - timedelta(days=30)).strftime('%Y-%m-%d')
     date_range_end = dates[-1]
     stage_chart_data = json.dumps([{'name': k, 'value': v} for k, v in stage_data.items()], ensure_ascii=False)
     channel_chart_data = json.dumps([{'name': k, 'value': v} for k, v in channel_data.items()], ensure_ascii=False)
@@ -274,7 +274,7 @@ def generate_html(data, update_time):
             padding: 34px 32px 44px;
         }}
         .container {{
-            max-width: 1880px;
+            max-width: none;
             margin: 0 auto;
         }}
         .header {{

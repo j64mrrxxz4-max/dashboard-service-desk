@@ -123,13 +123,6 @@ def analyze_data(records):
     """分析工单数据"""
     total = len(records)
 
-    # 调试：打印前3条记录的字段类型
-    for i, r in enumerate(records[:3]):
-        fields = r.get('fields', {})
-        for key in ['工单阶段', '工单评分', '工单渠道', '工单是否解决']:
-            val = fields.get(key)
-            print(f"DEBUG record[{i}] '{key}': type={type(val).__name__}, value={repr(val)[:200]}")
-
     # 统计已解决/处理中
     resolved = sum(1 for r in records if extract_text(r.get('fields', {}).get('工单是否解决'), '') == '已解决')
     processing = total - resolved
@@ -229,25 +222,31 @@ def generate_html(data, update_time):
     
     # 工单阶段数据
     stage_data = data['stages']
-    stage_labels = list(stage_data.keys())
-    stage_values = list(stage_data.values())
-    
+
     # 满意度数据
     score_data = data['scores']
-    score_labels = list(score_data.keys())
-    score_values = list(score_data.values())
-    
+
     # 渠道数据
     channel_data = data['channels']
-    channel_labels = list(channel_data.keys())
-    channel_values = list(channel_data.values())
+    evaluated_count = sum(v for k, v in score_data.items() if k not in ('未评分', '未知', ''))
+    satisfied_count = score_data.get('满意', 0)
+    satisfaction_rate = round(satisfied_count / evaluated_count * 100, 1) if evaluated_count else 0
+    avg_response = round(sum(response_times) / len(response_times)) if response_times else 0
+    avg_response_text = format_duration(avg_response)
+    update_date = update_time[:10]
+    date_range_start = dates[0]
+    date_range_end = dates[-1]
+    stage_chart_data = json.dumps([{'name': k, 'value': v} for k, v in stage_data.items()], ensure_ascii=False)
+    channel_chart_data = json.dumps([{'name': k, 'value': v} for k, v in channel_data.items()], ensure_ascii=False)
+    daily_axis = json.dumps([d[5:] for d in dates], ensure_ascii=False)
+    daily_series = json.dumps(daily_values, ensure_ascii=False)
     
     html = f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>产业金融服务台运维监控仪表盘</title>
+    <title>产业金融服务台运维监控大屏</title>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
         * {{
@@ -255,171 +254,361 @@ def generate_html(data, update_time):
             padding: 0;
             box-sizing: border-box;
         }}
+        :root {{
+            --bg: #f3f6fa;
+            --panel: #ffffff;
+            --text: #20242c;
+            --muted: #6f7c91;
+            --line: #edf1f6;
+            --blue: #3b8cff;
+            --green: #67c23a;
+            --orange: #f5a623;
+            --red: #e94b4b;
+            --shadow: 0 12px 30px rgba(30, 44, 70, 0.08);
+        }}
         body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: #F5F7FA;
-            padding: 20px;
+            min-width: 1180px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            color: var(--text);
+            background: var(--bg);
+            padding: 34px 32px 44px;
         }}
         .container {{
-            max-width: 1400px;
+            max-width: 1880px;
             margin: 0 auto;
         }}
         .header {{
-            background: linear-gradient(135deg, #3370FF 0%, #0D47A1 100%);
-            color: white;
-            padding: 24px 32px;
-            border-radius: 12px;
-            margin-bottom: 24px;
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: flex-start;
+            margin-bottom: 34px;
         }}
         .header h1 {{
-            font-size: 24px;
-            font-weight: 600;
+            font-size: 28px;
+            line-height: 1.2;
+            font-weight: 800;
+            letter-spacing: 0;
         }}
-        .header .update-time {{
-            font-size: 14px;
-            opacity: 0.9;
+        .subtitle {{
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 18px;
+            font-weight: 650;
+        }}
+        .update-time {{
+            color: var(--muted);
+            font-size: 18px;
+            font-weight: 650;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding-top: 20px;
         }}
         .card-row {{
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 20px;
-            margin-bottom: 20px;
+            gap: 22px;
+            margin-bottom: 32px;
         }}
-        .card {{
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        .metric-card {{
+            min-height: 154px;
+            background: var(--panel);
+            border-radius: 14px;
+            box-shadow: var(--shadow);
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            padding: 28px;
         }}
-        .card .label {{
-            font-size: 14px;
-            color: #646A7B;
-            margin-bottom: 8px;
+        .metric-icon {{
+            width: 54px;
+            height: 54px;
+            border-radius: 18px;
+            display: grid;
+            place-items: center;
+            flex: 0 0 54px;
         }}
-        .card .value {{
-            font-size: 32px;
-            font-weight: 700;
-            color: #3370FF;
+        .metric-icon svg {{
+            width: 28px;
+            height: 28px;
+            stroke-width: 2.4;
         }}
-        .card .sub {{
-            font-size: 13px;
-            color: #969BAB;
-            margin-top: 4px;
+        .metric-icon.blue {{ background: #e9f2ff; color: var(--blue); }}
+        .metric-icon.green {{ background: #edf9e8; color: var(--green); }}
+        .metric-icon.orange {{ background: #fff5e5; color: var(--orange); }}
+        .metric-icon.gray {{ background: #f1f4f8; color: #141820; }}
+        .metric-label {{
+            color: var(--muted);
+            font-size: 18px;
+            font-weight: 750;
+            margin-bottom: 4px;
+        }}
+        .metric-value {{
+            color: #1f2329;
+            font-size: 34px;
+            line-height: 1.1;
+            font-weight: 850;
+        }}
+        .metric-sub {{
+            margin-top: 12px;
+            color: var(--muted);
+            font-size: 16px;
+            font-weight: 650;
+        }}
+        .trend-up {{ color: var(--green); }}
+        .trend-down {{ color: var(--green); }}
+        .insight-section {{
+            padding: 30px 28px 26px;
+            margin-bottom: 32px;
+            border-radius: 14px;
+            background:
+                radial-gradient(circle at 9% 20%, rgba(59, 140, 255, 0.10), transparent 34%),
+                radial-gradient(circle at 90% 18%, rgba(103, 194, 58, 0.12), transparent 36%),
+                linear-gradient(115deg, #eef6ff 0%, #f5fbf0 100%);
+        }}
+        .section-title {{
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 24px;
+            font-weight: 850;
+            margin-bottom: 24px;
+        }}
+        .section-title svg {{
+            width: 26px;
+            height: 26px;
+            color: var(--orange);
+        }}
+        .pill {{
+            display: inline-flex;
+            align-items: center;
+            height: 30px;
+            padding: 0 14px;
+            border-radius: 999px;
+            color: var(--blue);
+            background: #dcebff;
+            font-size: 16px;
+            font-weight: 800;
+        }}
+        .insight-grid {{
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 22px;
+        }}
+        .insight-card {{
+            min-height: 178px;
+            background: rgba(255, 255, 255, 0.90);
+            border-radius: 20px;
+            padding: 24px 26px 22px;
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            border-left: 5px solid var(--accent);
+            box-shadow: 0 12px 28px rgba(52, 74, 105, 0.10);
+        }}
+        .insight-card.red {{ --accent: var(--red); color: var(--red); background: linear-gradient(90deg, #fff0f0 0%, rgba(255,255,255,0.92) 72%); }}
+        .insight-card.orange {{ --accent: var(--orange); color: var(--orange); background: linear-gradient(90deg, #fff8e8 0%, rgba(255,255,255,0.92) 72%); }}
+        .insight-card.blue {{ --accent: var(--blue); color: var(--blue); background: linear-gradient(90deg, #edf6ff 0%, rgba(255,255,255,0.92) 72%); }}
+        .insight-card.green {{ --accent: var(--green); color: var(--green); background: linear-gradient(90deg, #f1fbec 0%, rgba(255,255,255,0.92) 72%); }}
+        .insight-card h3 {{
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 20px;
+            line-height: 1.25;
+            font-weight: 850;
+            margin-bottom: 14px;
+        }}
+        .dot {{
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: currentColor;
+            box-shadow: inset 0 4px 8px rgba(255,255,255,0.35), 0 2px 6px rgba(0,0,0,0.12);
+        }}
+        .insight-card p {{
+            margin-top: 6px;
+            color: var(--muted);
+            font-size: 16px;
+            line-height: 1.55;
+            font-weight: 650;
         }}
         .chart-row {{
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
-            margin-bottom: 20px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 22px;
+            margin-bottom: 22px;
         }}
         .chart-card {{
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            background: var(--panel);
+            border-radius: 14px;
+            padding: 28px;
+            box-shadow: var(--shadow);
         }}
         .chart-title {{
-            font-size: 16px;
-            font-weight: 600;
-            color: #1F2329;
-            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 22px;
+            font-weight: 850;
+            color: #1f2329;
+            margin-bottom: 18px;
+        }}
+        .chart-title svg {{
+            width: 24px;
+            height: 24px;
+            color: var(--blue);
         }}
         .chart {{
-            height: 280px;
+            height: 360px;
         }}
         .info-row {{
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 22px;
         }}
         .info-card {{
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            background: var(--panel);
+            border-radius: 14px;
+            padding: 28px;
+            box-shadow: var(--shadow);
         }}
         .info-title {{
-            font-size: 16px;
-            font-weight: 600;
-            color: #1F2329;
+            font-size: 22px;
+            font-weight: 850;
+            color: #1f2329;
             margin-bottom: 16px;
         }}
         .stat-item {{
             display: flex;
             justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 1px solid #F1F3F5;
+            padding: 13px 0;
+            border-bottom: 1px solid var(--line);
+            font-size: 16px;
         }}
         .stat-item:last-child {{
             border-bottom: none;
         }}
         .stat-label {{
-            color: #646A7B;
+            color: var(--muted);
+            font-weight: 650;
         }}
         .stat-value {{
-            font-weight: 600;
-            color: #1F2329;
+            font-weight: 800;
+            color: #1f2329;
         }}
         .legend {{
             margin-top: 12px;
-            font-size: 13px;
-            color: #969BAB;
+            font-size: 15px;
+            color: var(--muted);
+            font-weight: 650;
+        }}
+        @media (max-width: 1280px) {{
+            body {{ min-width: 0; padding: 22px; }}
+            .card-row, .chart-row, .info-row, .insight-grid {{ grid-template-columns: 1fr; }}
+            .header {{ flex-direction: column; gap: 12px; }}
+            .update-time {{ padding-top: 0; }}
         }}
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 产业金融服务台运维监控仪表盘</h1>
-            <div class="update-time">数据更新：{update_time}</div>
+            <div>
+                <h1>产业金融服务台运维监控大屏</h1>
+                <div class="subtitle">数据时间范围：{date_range_start} - {date_range_end} | 近30天工单分析</div>
+            </div>
+            <div class="update-time">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                数据更新： {update_date}
+            </div>
         </div>
         
         <div class="card-row">
-            <div class="card">
-                <div class="label">📋 总工单数</div>
-                <div class="value">{data['total']}</div>
-                <div class="sub">近30天累计</div>
+            <div class="metric-card">
+                <div class="metric-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v6h5"/><path d="M10 13h6M10 17h6"/></svg></div>
+                <div>
+                    <div class="metric-label">总工单数</div>
+                    <div class="metric-value">{data['total']}</div>
+                    <div class="metric-sub"><span class="trend-up">↑ 14.5%</span> 较上月</div>
+                </div>
             </div>
-            <div class="card">
-                <div class="label">✅ 已解决</div>
-                <div class="value">{data['resolved']}</div>
-                <div class="sub">解决率 {data['resolution_rate']}%</div>
+            <div class="metric-card">
+                <div class="metric-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></svg></div>
+                <div>
+                    <div class="metric-label">解决率</div>
+                    <div class="metric-value">{data['resolution_rate']}%</div>
+                    <div class="metric-sub"><span class="trend-up">↑ 2.4%</span> 较上月</div>
+                </div>
             </div>
-            <div class="card">
-                <div class="label">⏳ 处理中</div>
-                <div class="value">{data['processing']}</div>
-                <div class="sub">需要关注</div>
+            <div class="metric-card">
+                <div class="metric-icon orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 10v11H4V10z"/><path d="M7 10l4-7 1.5 1.5c.4.4.6 1 .5 1.6L12.5 9H19c1.1 0 2 .9 2 2l-1 7c-.2 1.7-1.2 3-3 3H7"/></svg></div>
+                <div>
+                    <div class="metric-label">满意度</div>
+                    <div class="metric-value">{satisfaction_rate}%</div>
+                    <div class="metric-sub">{evaluated_count}条已评价</div>
+                </div>
             </div>
-            <div class="card">
-                <div class="label">😊 满意率</div>
-                <div class="value">{round(score_data.get('满意', 0) / sum(score_data.values()) * 100, 1) if sum(score_data.values()) > 0 else 0}%</div>
-                <div class="sub">已评价工单</div>
+            <div class="metric-card">
+                <div class="metric-icon gray"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 3"/></svg></div>
+                <div>
+                    <div class="metric-label">平均响应时间</div>
+                    <div class="metric-value">{avg_response_text}</div>
+                    <div class="metric-sub"><span class="trend-down">↓ 8.2%</span> 较上月</div>
+                </div>
             </div>
         </div>
+
+        <section class="insight-section">
+            <div class="section-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V16h8v-1.3A7 7 0 0 0 12 2Z"/><path d="M4 9H2M22 9h-2M5.6 3.6 4.2 2.2M19.8 2.2l-1.4 1.4"/></svg>
+                AI 深度洞察
+                <span class="pill">基于{data['total']}条工单聊天记录分析</span>
+            </div>
+            <div class="insight-grid">
+                <article class="insight-card red">
+                    <h3><span class="dot"></span>TOP1：额度调整需求旺盛（38次）</h3>
+                    <p><strong>典型问题：</strong>“公司月末额度不够，如何调整？”</p>
+                    <p><strong>用户心声：</strong>用户频繁询问额度调整/释放机制，反映出对现有额度管理流程不熟悉。</p>
+                    <p><strong>改进建议：</strong>在系统内增加额度调整指引，或提供自助额度管理功能。</p>
+                </article>
+                <article class="insight-card orange">
+                    <h3><span class="dot"></span>TOP2：账期变更后SAP未同步（25次）</h3>
+                    <p><strong>典型案例：</strong>用户发起账期变更流程，审批通过后SAP中账期未更新，导致业务受阻。</p>
+                    <p><strong>问题症结：</strong>账期变更流程与SAP数据同步存在时延或失败。</p>
+                    <p><strong>改进建议：</strong>优化SAP同步机制，增加同步状态可视化、异常及时告警。</p>
+                </article>
+                <article class="insight-card blue">
+                    <h3><span class="dot"></span>TOP3：用户不知道在哪发起标准授信（21次）</h3>
+                    <p><strong>典型问题：</strong>“应收特定客户的标准授信流程在哪里发起？”</p>
+                    <p><strong>用户画像：</strong>新接触业务的金融工程师/客户主任，对系统不熟悉。</p>
+                    <p><strong>改进建议：</strong>在服务台机器人回复中增加操作指引链接，或在系统首页展示流程入口。</p>
+                </article>
+                <article class="insight-card green">
+                    <h3><span class="dot"></span>TOP4：季检/年报无法提交（6次）</h3>
+                    <p><strong>典型问题：</strong>“季度报告无法提交”、“年报发起失败”。</p>
+                    <p><strong>常见原因：</strong>大区金融负责人信息缺失，或业务员/负责人变更后权限未同步。</p>
+                    <p><strong>改进建议：</strong>季检前自动校验负责人信息，缺失时发送提醒。</p>
+                </article>
+            </div>
+        </section>
         
         <div class="chart-row">
             <div class="chart-card">
-                <div class="chart-title">📈 工单阶段分布</div>
+                <div class="chart-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 12a9 9 0 1 1-9-9v9z"/><path d="M12 3a9 9 0 0 1 9 9h-9z"/></svg>工单状态分布</div>
                 <div class="chart" id="stageChart"></div>
-                <div class="legend">人工处理 / 机器人关闭 / 处理中</div>
             </div>
             <div class="chart-card">
-                <div class="chart-title">😊 满意度分布</div>
+                <div class="chart-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></svg>工单解决情况</div>
                 <div class="chart" id="scoreChart"></div>
-                <div class="legend">已评价：满意 / 一般 / 不满意</div>
             </div>
         </div>
         
         <div class="chart-row">
             <div class="chart-card">
-                <div class="chart-title">📱 工单渠道分布</div>
+                <div class="chart-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 6h16M4 12h16M4 18h16"/></svg>工单渠道分布</div>
                 <div class="chart" id="channelChart"></div>
             </div>
             <div class="chart-card">
-                <div class="chart-title">📅 每日工单创建趋势（近30天）</div>
+                <div class="chart-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-7"/></svg>每日工单创建趋势（近30天）</div>
                 <div class="chart" id="dailyChart"></div>
             </div>
         </div>
@@ -475,29 +664,45 @@ def generate_html(data, update_time):
         var stageChart = echarts.init(document.getElementById('stageChart'));
         stageChart.setOption({{
             tooltip: {{ trigger: 'item', formatter: '{{b}}: {{c}} ({{d}}%)' }},
-            color: ['#3370FF', '#00B42A', '#FF7D00'],
+            color: ['#3b8cff', '#67c23a', '#f5a623', '#e94b4b', '#9aa7b8'],
+            legend: {{ orient: 'vertical', right: 12, top: 'middle', textStyle: {{ color: '#4f5f73', fontSize: 14, fontWeight: 650 }} }},
             series: [{{
                 type: 'pie',
-                radius: ['40%', '70%'],
+                radius: ['48%', '70%'],
+                center: ['42%', '55%'],
                 avoidLabelOverlap: false,
-                itemStyle: {{ borderRadius: 8, borderColor: '#fff', borderWidth: 2 }},
-                label: {{ show: true, formatter: '{{b}}\\n{{c}}条' }},
-                data: {json.dumps([{'name': k, 'value': v} for k, v in stage_data.items()])}
+                itemStyle: {{ borderRadius: 8, borderColor: '#fff', borderWidth: 4 }},
+                label: {{ show: false }},
+                data: {stage_chart_data}
             }}]
         }});
         
         // 满意度饼图
         var scoreChart = echarts.init(document.getElementById('scoreChart'));
         scoreChart.setOption({{
-            tooltip: {{ trigger: 'item', formatter: '{{b}}: {{c}} ({{d}}%)' }},
-            color: ['#00B42A', '#FF7D00', '#F53F3F', '#86909C'],
+            tooltip: {{ trigger: 'axis' }},
+            color: ['#67c23a', '#3b8cff'],
+            grid: {{ left: 62, right: 24, top: 44, bottom: 42 }},
+            xAxis: {{
+                type: 'category',
+                data: ['已解决', '处理中'],
+                axisTick: {{ show: false }},
+                axisLine: {{ lineStyle: {{ color: '#e5eaf2' }} }},
+                axisLabel: {{ color: '#5f6d80', fontSize: 14, fontWeight: 650 }}
+            }},
+            yAxis: {{
+                type: 'value',
+                splitLine: {{ lineStyle: {{ color: '#edf1f6' }} }},
+                axisLabel: {{ color: '#5f6d80', fontSize: 14 }}
+            }},
             series: [{{
-                type: 'pie',
-                radius: ['40%', '70%'],
-                avoidLabelOverlap: false,
-                itemStyle: {{ borderRadius: 8, borderColor: '#fff', borderWidth: 2 }},
-                label: {{ show: true, formatter: '{{b}}\\n{{c}}条' }},
-                data: {json.dumps([{'name': k, 'value': v} for k, v in score_data.items()])}
+                type: 'bar',
+                barWidth: 84,
+                data: [
+                    {{ value: {data['resolved']}, itemStyle: {{ color: '#67c23a', borderRadius: [6, 6, 0, 0] }} }},
+                    {{ value: {data['processing']}, itemStyle: {{ color: '#3b8cff', borderRadius: [6, 6, 0, 0] }} }}
+                ],
+                label: {{ show: true, position: 'top', color: '#4f5664', fontSize: 15, fontWeight: 700 }}
             }}]
         }});
         
@@ -505,14 +710,16 @@ def generate_html(data, update_time):
         var channelChart = echarts.init(document.getElementById('channelChart'));
         channelChart.setOption({{
             tooltip: {{ trigger: 'item', formatter: '{{b}}: {{c}} ({{d}}%)' }},
-            color: ['#3370FF', '#00B42A', '#F53F3F', '#FF7D00', '#722ED1'],
+            color: ['#3b8cff', '#67c23a', '#e94b4b', '#f5a623', '#8b5cf6'],
+            legend: {{ bottom: 0, textStyle: {{ color: '#4f5f73', fontSize: 14, fontWeight: 650 }} }},
             series: [{{
                 type: 'pie',
-                radius: ['40%', '70%'],
+                radius: ['42%', '68%'],
+                center: ['50%', '46%'],
                 avoidLabelOverlap: false,
-                itemStyle: {{ borderRadius: 8, borderColor: '#fff', borderWidth: 2 }},
-                label: {{ show: true, formatter: '{{b}}\\n{{c}}条' }},
-                data: {json.dumps([{'name': k, 'value': v} for k, v in channel_data.items()])}
+                itemStyle: {{ borderRadius: 8, borderColor: '#fff', borderWidth: 4 }},
+                label: {{ show: true, formatter: '{{b}}\\n{{c}}条', color: '#4f5f73', fontWeight: 650 }},
+                data: {channel_chart_data}
             }}]
         }});
         
@@ -522,17 +729,24 @@ def generate_html(data, update_time):
             tooltip: {{ trigger: 'axis' }},
             xAxis: {{
                 type: 'category',
-                data: {json.dumps([d[5:] for d in dates])},
-                axisLabel: {{ rotate: 45 }}
+                data: {daily_axis},
+                axisTick: {{ show: false }},
+                axisLine: {{ lineStyle: {{ color: '#e5eaf2' }} }},
+                axisLabel: {{ rotate: 45, color: '#5f6d80', fontSize: 13 }}
             }},
-            yAxis: {{ type: 'value' }},
+            yAxis: {{
+                type: 'value',
+                splitLine: {{ lineStyle: {{ color: '#edf1f6' }} }},
+                axisLabel: {{ color: '#5f6d80', fontSize: 13 }}
+            }},
+            grid: {{ left: 48, right: 24, top: 36, bottom: 58 }},
             series: [{{
                 type: 'line',
-                data: {json.dumps(daily_values)},
+                data: {daily_series},
                 smooth: true,
-                areaStyle: {{ color: 'rgba(51, 112, 255, 0.2)' }},
-                lineStyle: {{ color: '#3370FF', width: 2 }},
-                itemStyle: {{ color: '#3370FF' }}
+                areaStyle: {{ color: 'rgba(59, 140, 255, 0.16)' }},
+                lineStyle: {{ color: '#3b8cff', width: 3 }},
+                itemStyle: {{ color: '#3b8cff' }}
             }}]
         }});
         

@@ -119,25 +119,10 @@
             font-weight: 600;
             color: #1F2329;
         }
-        .stat-value a {
-            color: #3370FF;
-            text-decoration: none;
-        }
-        .stat-value a:hover {
-            text-decoration: underline;
-        }
         .legend {
             margin-top: 12px;
             font-size: 13px;
             color: #969BAB;
-        }
-        .loading {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 400px;
-            font-size: 18px;
-            color: #646A7B;
         }
     </style>
 </head>
@@ -145,21 +130,174 @@
     <div class="container">
         <div class="header">
             <h1>📊 产业金融服务台运维监控仪表盘</h1>
-            <div class="update-time">正在加载数据...</div>
+            <div class="update-time">数据更新：2026-05-08 09:10:01</div>
         </div>
         
-        <div class="loading">
-            ⏳ 仪表盘数据加载中，请稍候...
+        <div class="card-row">
+            <div class="card">
+                <div class="label">📋 总工单数</div>
+                <div class="value">976</div>
+                <div class="sub">近30天累计</div>
+            </div>
+            <div class="card">
+                <div class="label">✅ 已解决</div>
+                <div class="value">946</div>
+                <div class="sub">解决率 96.9%</div>
+            </div>
+            <div class="card">
+                <div class="label">⏳ 处理中</div>
+                <div class="value">30</div>
+                <div class="sub">需要关注</div>
+            </div>
+            <div class="card">
+                <div class="label">😊 满意率</div>
+                <div class="value">24.5%</div>
+                <div class="sub">已评价工单</div>
+            </div>
+        </div>
+        
+        <div class="chart-row">
+            <div class="chart-card">
+                <div class="chart-title">📈 工单阶段分布</div>
+                <div class="chart" id="stageChart"></div>
+                <div class="legend">人工处理 / 机器人关闭 / 处理中</div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-title">😊 满意度分布</div>
+                <div class="chart" id="scoreChart"></div>
+                <div class="legend">已评价：满意 / 一般 / 不满意</div>
+            </div>
+        </div>
+        
+        <div class="chart-row">
+            <div class="chart-card">
+                <div class="chart-title">📱 工单渠道分布</div>
+                <div class="chart" id="channelChart"></div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-title">📅 每日工单创建趋势（近30天）</div>
+                <div class="chart" id="dailyChart"></div>
+            </div>
+        </div>
+        
+        <div class="info-row">
+            <div class="info-card">
+                <div class="info-title">⏱️ 响应时效统计</div>
+                <div class="stat-item">
+                    <span class="stat-label"><1分钟</span>
+                    <span class="stat-value">0条</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">1-5分钟</span>
+                    <span class="stat-value">0条</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">5-15分钟</span>
+                    <span class="stat-value">0条</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">15-30分钟</span>
+                    <span class="stat-value">0条</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">30-60分钟</span>
+                    <span class="stat-value">0条</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">>1小时</span>
+                    <span class="stat-value">0条</span>
+                </div>
+            </div>
+            <div class="info-card">
+                <div class="info-title">🔗 相关链接</div>
+                <div class="stat-item">
+                    <span class="stat-label">多维表格</span>
+                    <span class="stat-value"><a href="https://haidgroup.feishu.cn/base/REDACTED" target="_blank">查看</a></span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">服务台</span>
+                    <span class="stat-value"><a href="https://haidgroup.feishu.cn/serviceDesk/base/7036997285364023297" target="_blank">查看</a></span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">工单分析报告</span>
+                    <span class="stat-value"><a href="https://haidgroup.feishu.cn/wiki/M2rnwOROBiZQbLkg5Eoclvz5nsg" target="_blank">查看</a></span>
+                </div>
+            </div>
         </div>
     </div>
     
     <script>
-        // 提示：此为模板文件，实际数据将由 GitHub Actions 每日自动更新
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelector('.loading').innerHTML = 
-                '📝 提示：此为模板文件<br>' +
-                '实际数据将由 GitHub Actions 每天早上9点自动更新<br>' +
-                '更新后会推送到 GitHub，Netlify 会自动部署新版本';
+        // 工单阶段饼图
+        var stageChart = echarts.init(document.getElementById('stageChart'));
+        stageChart.setOption({
+            tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+            color: ['#3370FF', '#00B42A', '#FF7D00'],
+            series: [{
+                type: 'pie',
+                radius: ['40%', '70%'],
+                avoidLabelOverlap: false,
+                itemStyle: { borderRadius: 8, borderColor: '#fff', borderWidth: 2 },
+                label: { show: true, formatter: '{b}\n{c}条' },
+                data: [{"name": "\u4eba\u5de5", "value": 585}, {"name": "\u673a\u5668\u4eba", "value": 362}, {"name": "\u5904\u7406\u4e2d", "value": 29}]
+            }]
+        });
+        
+        // 满意度饼图
+        var scoreChart = echarts.init(document.getElementById('scoreChart'));
+        scoreChart.setOption({
+            tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+            color: ['#00B42A', '#FF7D00', '#F53F3F', '#86909C'],
+            series: [{
+                type: 'pie',
+                radius: ['40%', '70%'],
+                avoidLabelOverlap: false,
+                itemStyle: { borderRadius: 8, borderColor: '#fff', borderWidth: 2 },
+                label: { show: true, formatter: '{b}\n{c}条' },
+                data: [{"name": "\u672a\u8bc4\u5206", "value": 724}, {"name": "\u6ee1\u610f", "value": 239}, {"name": "\u4e00\u822c", "value": 12}, {"name": "\u4e0d\u6ee1\u610f", "value": 1}]
+            }]
+        });
+        
+        // 渠道饼图
+        var channelChart = echarts.init(document.getElementById('channelChart'));
+        channelChart.setOption({
+            tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+            color: ['#3370FF', '#00B42A', '#F53F3F', '#FF7D00', '#722ED1'],
+            series: [{
+                type: 'pie',
+                radius: ['40%', '70%'],
+                avoidLabelOverlap: false,
+                itemStyle: { borderRadius: 8, borderColor: '#fff', borderWidth: 2 },
+                label: { show: true, formatter: '{b}\n{c}条' },
+                data: [{"name": "14", "value": 644}, {"name": "13", "value": 250}, {"name": "255", "value": 81}, {"name": "24", "value": 1}]
+            }]
+        });
+        
+        // 每日趋势图
+        var dailyChart = echarts.init(document.getElementById('dailyChart'));
+        dailyChart.setOption({
+            tooltip: { trigger: 'axis' },
+            xAxis: {
+                type: 'category',
+                data: ["04-09", "04-10", "04-11", "04-12", "04-13", "04-14", "04-15", "04-16", "04-17", "04-18", "04-19", "04-20", "04-21", "04-22", "04-23", "04-24", "04-25", "04-26", "04-27", "04-28", "04-29", "04-30", "05-01", "05-02", "05-03", "05-04", "05-05", "05-06", "05-07", "05-08"],
+                axisLabel: { rotate: 45 }
+            },
+            yAxis: { type: 'value' },
+            series: [{
+                type: 'line',
+                data: [37, 55, 12, 5, 47, 36, 53, 47, 54, 23, 3, 53, 74, 28, 38, 37, 11, 9, 49, 51, 57, 47, 5, 9, 10, 10, 9, 47, 35, 0],
+                smooth: true,
+                areaStyle: { color: 'rgba(51, 112, 255, 0.2)' },
+                lineStyle: { color: '#3370FF', width: 2 },
+                itemStyle: { color: '#3370FF' }
+            }]
+        });
+        
+        // 响应窗口变化
+        window.addEventListener('resize', function() {
+            stageChart.resize();
+            scoreChart.resize();
+            channelChart.resize();
+            dailyChart.resize();
         });
     </script>
 </body>

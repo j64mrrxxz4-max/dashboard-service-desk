@@ -75,30 +75,44 @@ def get_bitable_records(token, app_token, table_name):
     
     return records
 
+def extract_text(value, default='未知'):
+    """从飞书字段值中提取文本（处理字典/列表等复杂类型）"""
+    if value is None:
+        return default
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, dict):
+        return value.get('text', value.get('name', str(value)))
+    if isinstance(value, list):
+        return ', '.join(extract_text(v, default) for v in value)
+    return str(value)
+
 def analyze_data(records):
     """分析工单数据"""
     total = len(records)
-    
+
     # 统计已解决/处理中
-    resolved = sum(1 for r in records if r.get('fields', {}).get('工单是否解决') == '已解决')
+    resolved = sum(1 for r in records if extract_text(r.get('fields', {}).get('工单是否解决'), '') == '已解决')
     processing = total - resolved
-    
+
     # 统计工单阶段
     stages = Counter()
     for r in records:
-        stage = r.get('fields', {}).get('工单阶段', '未知')
+        stage = extract_text(r.get('fields', {}).get('工单阶段'), '未知')
         stages[stage] += 1
-    
+
     # 统计满意度
     scores = Counter()
     for r in records:
-        score = r.get('fields', {}).get('工单评分', '未评分')
+        score = extract_text(r.get('fields', {}).get('工单评分'), '未评分')
         scores[score] += 1
-    
+
     # 统计渠道
     channels = Counter()
     for r in records:
-        channel = r.get('fields', {}).get('工单渠道', '未知')
+        channel = extract_text(r.get('fields', {}).get('工单渠道'), '未知')
         channels[channel] += 1
     
     # 统计响应时效（首次回复间隔）

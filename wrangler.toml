@@ -1,5 +1,0 @@
-name = "dashboard-service-desk"
-compatibility_date = "2026-05-08"
-
-[assets]
-directory = "./dashboard--service-desk-full/public"

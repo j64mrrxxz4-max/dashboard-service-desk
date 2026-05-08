@@ -93,6 +93,13 @@ def analyze_data(records):
     """分析工单数据"""
     total = len(records)
 
+    # 调试：打印前3条记录的字段类型
+    for i, r in enumerate(records[:3]):
+        fields = r.get('fields', {})
+        for key in ['工单阶段', '工单评分', '工单渠道', '工单是否解决']:
+            val = fields.get(key)
+            print(f"DEBUG record[{i}] '{key}': type={type(val).__name__}, value={repr(val)[:200]}")
+
     # 统计已解决/处理中
     resolved = sum(1 for r in records if extract_text(r.get('fields', {}).get('工单是否解决'), '') == '已解决')
     processing = total - resolved

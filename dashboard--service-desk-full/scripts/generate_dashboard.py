@@ -113,7 +113,10 @@ def analyze_data(records):
     for r in records:
         created = r.get('fields', {}).get('工单创建时间', '')
         if created:
-            date = created[:10]  # 取日期部分
+            if isinstance(created, (int, float)):
+                date = datetime.fromtimestamp(created / 1000 if created > 1e12 else created).strftime('%Y-%m-%d')
+            else:
+                date = str(created)[:10]
             daily_counts[date] += 1
     
     return {

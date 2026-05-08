@@ -1,0 +1,11 @@
+[build]
+  publish = "public"
+
+[build.environment]
+  NODE_VERSION = "18"
+
+# 重定向所有请求到 index.html（SPA 模式）
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

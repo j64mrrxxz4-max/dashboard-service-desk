@@ -217,41 +217,6 @@
         .chart {
             height: 360px;
         }
-        .info-row {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 22px;
-        }
-        .info-card {
-            background: var(--panel);
-            border-radius: 14px;
-            padding: 28px;
-            box-shadow: var(--shadow);
-        }
-        .info-title {
-            font-size: 22px;
-            font-weight: 850;
-            color: #1f2329;
-            margin-bottom: 16px;
-        }
-        .stat-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 13px 0;
-            border-bottom: 1px solid var(--line);
-            font-size: 16px;
-        }
-        .stat-item:last-child {
-            border-bottom: none;
-        }
-        .stat-label {
-            color: var(--muted);
-            font-weight: 650;
-        }
-        .stat-value {
-            font-weight: 800;
-            color: #1f2329;
-        }
         .legend {
             margin-top: 12px;
             font-size: 15px;
@@ -260,7 +225,7 @@
         }
         @media (max-width: 1280px) {
             body { min-width: 0; padding: 22px; }
-            .card-row, .chart-row, .info-row, .insight-grid { grid-template-columns: 1fr; }
+            .card-row, .chart-row, .insight-grid { grid-template-columns: 1fr; }
             .header { flex-direction: column; gap: 12px; }
             .update-time { padding-top: 0; }
         }
@@ -369,51 +334,6 @@
                 <div class="chart" id="dailyChart"></div>
             </div>
         </div>
-        
-        <div class="info-row">
-            <div class="info-card">
-                <div class="info-title">⏱️ 响应时效统计</div>
-                <div class="stat-item">
-                    <span class="stat-label"><1分钟</span>
-                    <span class="stat-value">0条</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">1-5分钟</span>
-                    <span class="stat-value">0条</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">5-15分钟</span>
-                    <span class="stat-value">0条</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">15-30分钟</span>
-                    <span class="stat-value">0条</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">30-60分钟</span>
-                    <span class="stat-value">0条</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">>1小时</span>
-                    <span class="stat-value">0条</span>
-                </div>
-            </div>
-            <div class="info-card">
-                <div class="info-title">🔗 相关链接</div>
-                <div class="stat-item">
-                    <span class="stat-label">多维表格</span>
-                    <span class="stat-value"><a href="https://haidgroup.feishu.cn/base/REDACTED" target="_blank">查看</a></span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">服务台</span>
-                    <span class="stat-value"><a href="https://haidgroup.feishu.cn/serviceDesk/base/7036997285364023297" target="_blank">查看</a></span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">工单分析报告</span>
-                    <span class="stat-value"><a href="https://haidgroup.feishu.cn/wiki/M2rnwOROBiZQbLkg5Eoclvz5nsg" target="_blank">查看</a></span>
-                </div>
-            </div>
-        </div>
     </div>
     
     <script>
@@ -476,7 +396,7 @@
                 avoidLabelOverlap: false,
                 itemStyle: { borderRadius: 8, borderColor: '#fff', borderWidth: 4 },
                 label: { show: true, formatter: '{b}\n{c}条', color: '#4f5f73', fontWeight: 650 },
-                data: [{"name": "14", "value": 644}, {"name": "13", "value": 250}, {"name": "255", "value": 81}, {"name": "24", "value": 1}]
+                data: [{"name": "飞书服务台", "value": 644}, {"name": "服务台机器人", "value": 250}, {"name": "其他渠道", "value": 81}, {"name": "人工录入", "value": 1}]
             }]
         });
         

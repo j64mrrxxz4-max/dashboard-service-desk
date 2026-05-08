@@ -11,6 +11,7 @@ from collections import Counter
 
 import lark_oapi as lark
 from lark_oapi.api.bitable.v1 import (
+    ListAppTableFieldRequest,
     ListAppTableRecordRequest,
     ListAppTableRequest,
 )
@@ -21,6 +22,13 @@ FEISHU_APP_ID = os.environ.get('FEISHU_APP_ID', '')
 FEISHU_APP_SECRET = os.environ.get('FEISHU_APP_SECRET', '')
 BITABLE_APP_TOKEN = os.environ.get('BITABLE_APP_TOKEN', 'REDACTED')
 TABLE_NAME = '飞书服务台 工单列表'
+CHANNEL_FIELD_NAME = '工单渠道'
+CHANNEL_CODE_LABELS = {
+    '14': '飞书服务台',
+    '13': '服务台机器人',
+    '255': '其他渠道',
+    '24': '人工录入',
+}
 
 # ==================== 飞书SDK工具函数 ====================
 def build_lark_client():
@@ -73,9 +81,55 @@ def find_table_id(client, app_token, table_name):
 
     raise Exception(f"找不到表: {table_name}")
 
+def get_field_option_map(client, app_token, table_id, field_name):
+    """读取多维表字段选项，用于把选项 ID 转成显示名称。"""
+    page_token = None
+
+    while True:
+        builder = (
+            ListAppTableFieldRequest.builder()
+            .app_token(app_token)
+            .table_id(table_id)
+            .page_size(100)
+        )
+        if page_token:
+            builder.page_token(page_token)
+
+        response = client.bitable.v1.app_table_field.list(builder.build())
+        ensure_success(response, "获取字段配置")
+
+        data = response.data
+        for field in data.items or []:
+            if field.field_name != field_name:
+                continue
+
+            options = getattr(getattr(field, 'property', None), 'options', None) or []
+            option_map = {}
+            for option in options:
+                if option.id and option.name:
+                    option_map[str(option.id)] = option.name
+                    option_map[str(option.name)] = option.name
+            return option_map
+
+        if not data.has_more:
+            break
+        page_token = data.page_token
+
+    return {}
+
+def normalize_channel(value, option_map):
+    """把工单渠道码转成可读名称。"""
+    channel = extract_text(value, '未知').strip()
+    if not channel:
+        return '未知'
+    if channel in option_map:
+        return option_map[channel]
+    return CHANNEL_CODE_LABELS.get(channel, channel)
+
 def get_bitable_records(client, app_token, table_name):
     """使用飞书官方 SDK 获取多维表格全部记录。"""
     table_id = find_table_id(client, app_token, table_name)
+    channel_option_map = get_field_option_map(client, app_token, table_id, CHANNEL_FIELD_NAME)
     records = []
     page_token = None
 
@@ -94,9 +148,12 @@ def get_bitable_records(client, app_token, table_name):
 
         data = response.data
         for record in data.items or []:
+            fields = record.fields or {}
+            if CHANNEL_FIELD_NAME in fields:
+                fields[CHANNEL_FIELD_NAME] = normalize_channel(fields[CHANNEL_FIELD_NAME], channel_option_map)
             records.append({
                 'record_id': record.record_id,
-                'fields': record.fields or {},
+                'fields': fields,
             })
 
         if not data.has_more:
@@ -190,31 +247,8 @@ def format_duration(seconds):
 
 def generate_html(data, update_time):
     """生成HTML仪表盘"""
-    # 计算响应时效分布
     response_times = data['response_times']
-    response_buckets = {
-        '<1分钟': 0,
-        '1-5分钟': 0,
-        '5-15分钟': 0,
-        '15-30分钟': 0,
-        '30-60分钟': 0,
-        '>1小时': 0
-    }
-    
-    for seconds in response_times:
-        if seconds < 60:
-            response_buckets['<1分钟'] += 1
-        elif seconds < 300:
-            response_buckets['1-5分钟'] += 1
-        elif seconds < 900:
-            response_buckets['5-15分钟'] += 1
-        elif seconds < 1800:
-            response_buckets['15-30分钟'] += 1
-        elif seconds < 3600:
-            response_buckets['30-60分钟'] += 1
-        else:
-            response_buckets['>1小时'] += 1
-    
+
     # 准备每日数据（最近30天）
     today = datetime.now()
     dates = [(today - timedelta(days=i)).strftime('%Y-%m-%d') for i in range(29, -1, -1)]
@@ -460,41 +494,6 @@ def generate_html(data, update_time):
         .chart {{
             height: 360px;
         }}
-        .info-row {{
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 22px;
-        }}
-        .info-card {{
-            background: var(--panel);
-            border-radius: 14px;
-            padding: 28px;
-            box-shadow: var(--shadow);
-        }}
-        .info-title {{
-            font-size: 22px;
-            font-weight: 850;
-            color: #1f2329;
-            margin-bottom: 16px;
-        }}
-        .stat-item {{
-            display: flex;
-            justify-content: space-between;
-            padding: 13px 0;
-            border-bottom: 1px solid var(--line);
-            font-size: 16px;
-        }}
-        .stat-item:last-child {{
-            border-bottom: none;
-        }}
-        .stat-label {{
-            color: var(--muted);
-            font-weight: 650;
-        }}
-        .stat-value {{
-            font-weight: 800;
-            color: #1f2329;
-        }}
         .legend {{
             margin-top: 12px;
             font-size: 15px;
@@ -503,7 +502,7 @@ def generate_html(data, update_time):
         }}
         @media (max-width: 1280px) {{
             body {{ min-width: 0; padding: 22px; }}
-            .card-row, .chart-row, .info-row, .insight-grid {{ grid-template-columns: 1fr; }}
+            .card-row, .chart-row, .insight-grid {{ grid-template-columns: 1fr; }}
             .header {{ flex-direction: column; gap: 12px; }}
             .update-time {{ padding-top: 0; }}
         }}
@@ -604,57 +603,12 @@ def generate_html(data, update_time):
         
         <div class="chart-row">
             <div class="chart-card">
-                <div class="chart-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 6h16M4 12h16M4 18h16"/></svg>工单渠道分布</div>
+                <div class="chart-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 6h16M4 12h16M4 18h16"/></svg>工单评价情况</div>
                 <div class="chart" id="channelChart"></div>
             </div>
             <div class="chart-card">
                 <div class="chart-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-7"/></svg>每日工单创建趋势（近30天）</div>
                 <div class="chart" id="dailyChart"></div>
-            </div>
-        </div>
-        
-        <div class="info-row">
-            <div class="info-card">
-                <div class="info-title">⏱️ 响应时效统计</div>
-                <div class="stat-item">
-                    <span class="stat-label"><1分钟</span>
-                    <span class="stat-value">{response_buckets['<1分钟']}条</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">1-5分钟</span>
-                    <span class="stat-value">{response_buckets['1-5分钟']}条</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">5-15分钟</span>
-                    <span class="stat-value">{response_buckets['5-15分钟']}条</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">15-30分钟</span>
-                    <span class="stat-value">{response_buckets['15-30分钟']}条</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">30-60分钟</span>
-                    <span class="stat-value">{response_buckets['30-60分钟']}条</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">>1小时</span>
-                    <span class="stat-value">{response_buckets['>1小时']}条</span>
-                </div>
-            </div>
-            <div class="info-card">
-                <div class="info-title">🔗 相关链接</div>
-                <div class="stat-item">
-                    <span class="stat-label">多维表格</span>
-                    <span class="stat-value"><a href="https://haidgroup.feishu.cn/base/REDACTED" target="_blank">查看</a></span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">服务台</span>
-                    <span class="stat-value"><a href="https://haidgroup.feishu.cn/serviceDesk/base/7036997285364023297" target="_blank">查看</a></span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">工单分析报告</span>
-                    <span class="stat-value"><a href="https://haidgroup.feishu.cn/wiki/M2rnwOROBiZQbLkg5Eoclvz5nsg" target="_blank">查看</a></span>
-                </div>
             </div>
         </div>
     </div>

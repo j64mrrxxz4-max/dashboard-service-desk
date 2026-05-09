@@ -20,7 +20,7 @@ from lark_oapi.api.bitable.v1 import (
 # 飞书应用凭证（通过GitHub Secrets传入）
 FEISHU_APP_ID = os.environ.get('FEISHU_APP_ID', '')
 FEISHU_APP_SECRET = os.environ.get('FEISHU_APP_SECRET', '')
-BITABLE_APP_TOKEN = os.environ.get('BITABLE_APP_TOKEN', 'REDACTED')
+BITABLE_APP_TOKEN = os.environ.get('BITABLE_APP_TOKEN', '')
 TABLE_NAME = '飞书服务台 工单列表'
 CHANNEL_FIELD_NAME = '工单渠道'
 CHANNEL_CODE_LABELS = {

@@ -35,7 +35,7 @@ git push -u origin main
 |-------------|------|
 | `FEISHU_APP_ID` | 飞书应用 ID |
 | `FEISHU_APP_SECRET` | 飞书应用密钥 |
-| `BITABLE_APP_TOKEN` | 多维表格 Token（默认 `REDACTED`）|
+| `BITABLE_APP_TOKEN` | 多维表格 Token |
 
 ### 3. 在 Cloudflare Pages 绑定 GitHub
 

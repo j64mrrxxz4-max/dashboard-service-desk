@@ -2,7 +2,7 @@ name: 每日仪表盘更新
 
 on:
   schedule:
-    - cron: '0 1 * * *'  # UTC 1:00 = 北京时间 9:00
+    - cron: '0 21 * * *'  # UTC 21:00 = 北京时间 5:00 (排队可能会有4个小时)
   workflow_dispatch:      # 支持手动触发
 
 jobs:
